@@ -62,6 +62,18 @@ export const FORMATS = {
   },
 };
 
+// Titles that are really just a tool's own filename/heading — not a project name.
+// We don't carry these across a conversion (converting CLAUDE.md -> AGENTS.md
+// should not produce a doc titled "CLAUDE").
+const GENERIC_TITLES = new Set([
+  'agents', 'claude', 'gemini', 'conventions', 'windsurf',
+  'copilot instructions', 'copilot-instructions', 'cline rules', 'coding conventions',
+  '.cursorrules', '.windsurfrules', '.clinerules',
+]);
+function isGenericTitle(t) {
+  return GENERIC_TITLES.has(t.trim().toLowerCase().replace(/\.md$/, ''));
+}
+
 /** Guess the source format from a filename and/or its contents. */
 export function detectFormat(filenameOrContent = '', content = '') {
   const name = filenameOrContent.toLowerCase();
@@ -215,7 +227,7 @@ export function parse(text, format) {
   }
 
   return {
-    title: meta.title || titleFromBody || '',
+    title: meta.title || (isGenericTitle(titleFromBody) ? '' : titleFromBody),
     intro,
     sections,
     globs,
@@ -235,8 +247,7 @@ function renderSections(ir) {
 }
 
 function renderAgents(ir) {
-  const title = ir.title || 'AGENTS.md';
-  const parts = [`# ${title.replace(/\.md$/i, '')}`];
+  const parts = [`# ${ir.title || 'AGENTS.md'}`];
   if (ir.intro) parts.push(ir.intro);
   if (ir.globs.length) {
     parts.push(`> **Applies to:** \`${ir.globs.join('`, `')}\``);

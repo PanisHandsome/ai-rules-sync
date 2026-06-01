@@ -70,6 +70,14 @@ ok('scan uses uv run pytest', py.spec.test === 'uv run pytest');
 const titled = convert('# AGENTS.md\n\n## Setup\n\nRun `npm test`.', { from: 'agents', to: 'agents' }).output;
 ok('title is not duplicated as a section', !titled.includes('## AGENTS.md'));
 
+// a tool filename title must not leak across a conversion
+const leak = convert('# CLAUDE.md\n\n## Setup\n\nRun `npm test`.', { from: 'claude', to: 'agents' }).output;
+ok('source filename title is not carried over', !/CLAUDE/.test(leak));
+ok('converted-to-agents uses an AGENTS title', leak.startsWith('# AGENTS'));
+// a real project title IS kept
+const keep = convert('# Acme Dashboard\n\n## Setup\n\nx', { from: 'claude', to: 'agents' }).output;
+ok('a real project title is preserved', keep.startsWith('# Acme Dashboard'));
+
 // merge: two files combine, same-heading sections fold together
 const a = '# AGENTS.md\n\n## Build\n\n- Test: `npm test`';
 const b = '## Build\n\n- Lint: `eslint .`\n\n## Style\n\n- No `any`.';
