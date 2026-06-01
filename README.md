@@ -19,9 +19,9 @@ CLI and the browser playground.
 ## Install
 
 ```bash
-npm install -g agentsync-cli      # installs the `agentsync` command
+npm install -g @panishandsome/agentsync   # installs the `agentsync` command
 # or run without installing:
-npx agentsync-cli --help
+npx @panishandsome/agentsync --help
 ```
 
 Or just clone and run from source — there are no dependencies:

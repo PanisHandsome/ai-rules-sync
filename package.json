@@ -1,10 +1,13 @@
 {
-  "name": "agentsync-cli",
+  "name": "@panishandsome/agentsync",
   "version": "0.1.0",
   "description": "Convert between AI coding-agent rule files (AGENTS.md, CLAUDE.md, .cursorrules, Copilot, Windsurf) or scaffold a fresh AGENTS.md. Zero dependencies.",
   "type": "module",
   "bin": {
     "agentsync": "bin/agentsync.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "exports": {
     ".": "./src/core/agentsync.js"
