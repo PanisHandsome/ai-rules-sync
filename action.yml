@@ -1,0 +1,21 @@
+name: 'agentsync lint'
+description: 'Check an AGENTS.md (or any agent rules file) for stale commands and missing paths.'
+branding:
+  icon: 'check-circle'
+  color: 'green'
+inputs:
+  file:
+    description: 'Path to the rules file to lint'
+    required: false
+    default: 'AGENTS.md'
+  strict:
+    description: 'Fail the build on warnings, not just errors'
+    required: false
+    default: 'false'
+runs:
+  using: 'composite'
+  steps:
+    - shell: bash
+      run: |
+        node "${{ github.action_path }}/bin/agentsync.mjs" lint "${{ inputs.file }}" \
+          ${{ inputs.strict == 'true' && '--strict' || '' }}

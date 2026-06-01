@@ -1,0 +1,3 @@
+[project]
+name = "billing-svc"
+dependencies = ["fastapi>=0.110", "uvicorn"]

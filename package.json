@@ -1,18 +1,31 @@
 {
-  "name": "agentsync",
+  "name": "agentsync-cli",
   "version": "0.1.0",
-  "description": "One source of truth for your AI coding-agent rules — convert between AGENTS.md, CLAUDE.md, .cursorrules and Copilot instructions, or generate a clean AGENTS.md.",
+  "description": "Convert between AI coding-agent rule files (AGENTS.md, CLAUDE.md, .cursorrules, Copilot, Windsurf) or scaffold a fresh AGENTS.md. Zero dependencies.",
   "type": "module",
   "bin": {
     "agentsync": "bin/agentsync.mjs"
   },
+  "exports": {
+    ".": "./src/core/agentsync.js"
+  },
   "scripts": {
     "web": "node serve.mjs",
+    "build": "node build.mjs",
     "cli": "node bin/agentsync.mjs",
     "test": "node test/run.mjs"
   },
-  "files": ["src", "bin"],
-  "keywords": ["agents.md", "codex", "claude", "cursor", "copilot", "ai", "coding-agent", "llm"],
+  "files": ["src", "bin", "README.md", "LICENSE"],
+  "keywords": ["agents.md", "codex", "claude", "cursor", "copilot", "windsurf", "ai", "coding-agent", "llm", "cli"],
+  "homepage": "https://panishandsome.github.io/ai-rules-sync/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PanisHandsome/ai-rules-sync.git"
+  },
+  "bugs": {
+    "url": "https://github.com/PanisHandsome/ai-rules-sync/issues"
+  },
+  "author": "PanisHandsome",
   "license": "MIT",
   "engines": { "node": ">=18" }
 }

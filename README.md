@@ -6,6 +6,8 @@
 
 **One source of truth for your AI coding-agent rules.**
 
+🔗 **Live playground: https://panishandsome.github.io/ai-rules-sync/**
+
 Codex reads `AGENTS.md`. Claude Code reads `CLAUDE.md`. Cursor reads `.cursorrules`.
 Copilot reads `.github/copilot-instructions.md`. Keeping them in sync by hand is
 tedious and they drift. `agentsync` **converts between all of them** — or
@@ -14,18 +16,38 @@ tedious and they drift. `agentsync` **converts between all of them** — or
 Zero dependencies. The exact same engine (`src/core/agentsync.js`) powers both the
 CLI and the browser playground.
 
+## Install
+
+```bash
+npm install -g agentsync-cli      # installs the `agentsync` command
+# or run without installing:
+npx agentsync-cli --help
+```
+
+Or just clone and run from source — there are no dependencies:
+
+```bash
+git clone https://github.com/PanisHandsome/ai-rules-sync
+cd ai-rules-sync
+node bin/agentsync.mjs --help
+```
+
 ## Quick start
 
 ```bash
-# Convert an existing rule file into AGENTS.md
-npx agentsync convert .cursorrules --to agents -o AGENTS.md
+# Point it at your repo and let it write AGENTS.md for you
+agentsync init
 
-# Re-target an AGENTS.md for another tool
-npx agentsync convert AGENTS.md --to copilot
+# Convert an existing rule file
+agentsync convert .cursorrules --to agents -o AGENTS.md
+agentsync convert CLAUDE.md --to copilot
 
-# Generate a fresh AGENTS.md from scratch
-npx agentsync generate --name my-app --language TypeScript --framework Next.js \
-    --test "pnpm test" --build "pnpm build" --lint "pnpm lint" -o AGENTS.md
+# Generate from explicit fields instead of scanning
+agentsync generate --name my-app --language TypeScript --framework Next.js \
+    --test "pnpm test" --build "pnpm build" -o AGENTS.md
+
+# Check an AGENTS.md for stale commands / missing paths
+agentsync lint AGENTS.md
 ```
 
 ## Try it in the browser
