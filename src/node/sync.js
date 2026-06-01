@@ -8,9 +8,13 @@
 // output format instead of inferring it from the filename.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { convert, detectFormat } from '../core/agentsync.js';
 
 export const CONFIG_NAME = 'agentsync.json';
+export const STATE_NAME = '.agentsync-state.json';
+
+const sha = (s) => createHash('sha1').update(s).digest('hex');
 
 export const EXAMPLE_CONFIG = {
   source: 'AGENTS.md',
@@ -29,6 +33,16 @@ export function loadConfig(dir = '.') {
     throw new Error(`${CONFIG_NAME} must have a "source" string and a "targets" array.`);
   }
   return cfg;
+}
+
+// Every file the config touches, with its resolved format. Source first.
+export function configFiles(cfg) {
+  const files = [{ file: cfg.source, to: detectFormat(basename(cfg.source)) }];
+  for (const t of cfg.targets) {
+    const file = typeof t === 'string' ? t : t.file;
+    files.push({ file, to: (typeof t === 'object' && t.to) || detectFormat(basename(file)) });
+  }
+  return files;
 }
 
 /**
@@ -57,4 +71,72 @@ export function sync({ dir = '.', write = true } = {}) {
     results.push({ file, to, changed, missing: before === null });
   }
   return { source: cfg.source, results, warnings };
+}
+
+/**
+ * Auto mode: any file may be edited. The one that changed since the last sync
+ * becomes the source for this run; the others are regenerated from it. A snapshot
+ * in .agentsync-state.json tracks "what changed". If two files changed at once it
+ * refuses and asks which wins (pass `source` to force).
+ *
+ * @param {{dir?: string, write?: boolean, source?: string}} opts
+ */
+export function syncAuto({ dir = '.', write = true, source: forced } = {}) {
+  const cfg = loadConfig(dir);
+  const all = configFiles(cfg);
+  const fmtOf = (f) => (all.find((x) => x.file === f) || {}).to || detectFormat(basename(f));
+
+  const statePath = join(dir, STATE_NAME);
+  let state = {};
+  if (existsSync(statePath)) { try { state = JSON.parse(readFileSync(statePath, 'utf8')); } catch { state = {}; } }
+
+  const cur = {};
+  for (const { file } of all) {
+    const p = join(dir, file);
+    const exists = existsSync(p);
+    const text = exists ? readFileSync(p, 'utf8') : null;
+    cur[file] = { exists, text, hash: exists ? sha(text) : null };
+  }
+
+  const names = all.map((x) => x.file);
+  const hasState = Object.keys(state).length > 0;
+
+  let winner;
+  if (forced) {
+    winner = forced;
+  } else if (!hasState) {
+    winner = cfg.source; // bootstrap from the configured source
+  } else {
+    const changed = names.filter((f) => cur[f].exists && state[f] !== cur[f].hash);
+    if (changed.length === 1) {
+      winner = changed[0];
+    } else if (changed.length === 0) {
+      const missing = names.filter((f) => !cur[f].exists);
+      if (!missing.length) return { mode: 'auto', winner: null, noop: true, results: [], warnings: [] };
+      winner = cfg.source;
+    } else {
+      const err = new Error(`Multiple files changed since last sync: ${changed.join(', ')}. Re-run with --source <file> to choose which wins.`);
+      err.code = 'CONFLICT';
+      throw err;
+    }
+  }
+
+  if (!cur[winner] || !cur[winner].exists) throw new Error(`source not found: ${winner}`);
+
+  const from = fmtOf(winner);
+  const results = [];
+  const warnings = [];
+  const newState = { [winner]: cur[winner].hash };
+  for (const { file } of all) {
+    if (file === winner) continue;
+    const to = fmtOf(file);
+    const res = convert(cur[winner].text, { from, to });
+    res.warnings.forEach((w) => warnings.push(`${file}: ${w}`));
+    const changed = cur[file].text !== res.output;
+    if (write && changed) writeFileSync(join(dir, file), res.output);
+    newState[file] = sha(res.output);
+    results.push({ file, to, changed, missing: !cur[file].exists });
+  }
+  if (write) writeFileSync(statePath, JSON.stringify(newState, null, 2) + '\n');
+  return { mode: 'auto', winner, results, warnings };
 }

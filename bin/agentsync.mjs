@@ -6,7 +6,7 @@ import { watch } from 'node:fs';
 import { convert, merge, generate, detectFormat, FORMATS } from '../src/core/agentsync.js';
 import { scanRepo } from '../src/node/scan.js';
 import { lintFile } from '../src/node/lint.js';
-import { sync } from '../src/node/sync.js';
+import { sync, syncAuto, loadConfig, configFiles } from '../src/node/sync.js';
 
 const args = process.argv.slice(2);
 const cmd = args[0];
@@ -23,7 +23,8 @@ const HELP = `agentsync — one source of truth for your AI coding-agent rules
 
 Usage:
   agentsync init [dir] [-o <out>] [--force]    scan a repo and write AGENTS.md
-  agentsync sync [--check] [--watch]            regenerate targets from agentsync.json
+  agentsync sync [--check] [--watch]            regenerate targets from the source in agentsync.json
+  agentsync sync --auto [--source <file>]       edit ANY file; the changed one wins, others follow
   agentsync convert <file> [--to agents|claude|cursor|copilot|windsurf|cline|aider|gemini] [--from <fmt>] [-o <out>]
   agentsync merge <file> <file> ... [--to <fmt>] [-o <out>]
   agentsync generate --name <n> [--language ts] [--framework next] [--test "npm test"] ... [-o <out>]
@@ -100,30 +101,45 @@ try {
       break;
     }
     case 'sync': {
+      const auto = has('auto');
       const runOnce = () => {
-        const { results, warnings } = sync({ write: !has('check') });
-        warnings.forEach((w) => process.stderr.write(`⚠ ${w}\n`));
-        const changed = results.filter((r) => r.changed);
-        for (const r of results) {
+        let res;
+        try {
+          res = auto
+            ? syncAuto({ write: !has('check'), source: flag('source') })
+            : sync({ write: !has('check') });
+        } catch (e) {
+          if (e.code === 'CONFLICT') { process.stderr.write(`✗ ${e.message}\n`); process.exit(2); }
+          throw e;
+        }
+        if (res.noop) { process.stderr.write('· nothing changed\n'); return 0; }
+        res.warnings.forEach((w) => process.stderr.write(`⚠ ${w}\n`));
+        if (auto && res.winner) process.stderr.write(`source this run: ${res.winner}\n`);
+        const changed = res.results.filter((r) => r.changed);
+        for (const r of res.results) {
           const mark = r.changed ? (has('check') ? '✗ out of sync' : '✓ updated') : '· up to date';
           process.stderr.write(`  ${mark}  ${r.file}\n`);
         }
         if (has('check') && changed.length) {
-          process.stderr.write(`\n${changed.length} file(s) out of sync. Run \`agentsync sync\`.\n`);
+          process.stderr.write(`\n${changed.length} file(s) out of sync. Run \`agentsync sync${auto ? ' --auto' : ''}\`.\n`);
           process.exit(1);
         }
         return changed.length;
       };
       if (has('watch')) {
-        const { source } = sync({ write: true });
         runOnce();
-        process.stderr.write(`\n👀 watching ${source} … (Ctrl-C to stop)\n`);
+        const cfg = loadConfig('.');
+        const watched = auto ? configFiles(cfg).map((f) => f.file) : [cfg.source];
+        process.stderr.write(`\n👀 watching ${watched.join(', ')} … (Ctrl-C to stop)\n`);
         let busy = false;
-        watch(source, () => {
-          if (busy) return;
-          busy = true;
-          setTimeout(() => { try { runOnce(); } catch (e) { process.stderr.write(`Error: ${e.message}\n`); } busy = false; }, 50);
-        });
+        for (const f of watched) {
+          if (!existsSync(f)) continue;
+          watch(f, () => {
+            if (busy) return;
+            busy = true;
+            setTimeout(() => { try { runOnce(); } catch (e) { process.stderr.write(`Error: ${e.message}\n`); } busy = false; }, 80);
+          });
+        }
       } else {
         runOnce();
         process.exit(0);

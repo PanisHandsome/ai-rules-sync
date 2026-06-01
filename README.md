@@ -81,6 +81,25 @@ echo "npx agentsync sync && git add -A" > .husky/pre-commit
 
 Edit only `AGENTS.md` from then on — the other files are generated outputs.
 
+### Don't want to be tied to one file? Use `--auto`
+
+With `--auto` you can edit **whichever** file your current tool prefers (CLAUDE.md in
+Claude Code, `.cursorrules` in Cursor, AGENTS.md in Codex…). agentsync tracks a
+snapshot in `.agentsync-state.json`, figures out which file you changed, and
+regenerates the rest from it:
+
+```bash
+agentsync sync --auto
+```
+
+If you edited two files since the last sync, it stops and asks which one wins:
+
+```bash
+agentsync sync --auto --source CLAUDE.md
+```
+
+Hook it up the same way: `echo "npx agentsync sync --auto && git add -A" > .husky/pre-commit`.
+
 ## Merge existing files into one
 
 Already have several rule files? Fold them into a single `AGENTS.md`:

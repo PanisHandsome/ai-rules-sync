@@ -6,3 +6,4 @@ dist/
 .env.*
 coverage/
 *.tgz
+.agentsync-state.json

@@ -2,10 +2,11 @@
 import { convert, merge, generate, detectFormat } from '../src/core/agentsync.js';
 import { scanRepo } from '../src/node/scan.js';
 import { lint } from '../src/node/lint.js';
-import { sync } from '../src/node/sync.js';
+import { sync, syncAuto } from '../src/node/sync.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -81,6 +82,24 @@ ok('merge keeps distinct section (Style)', mg.includes('## Style'));
 const sres = sync({ dir: join(here, 'fixtures', 'sync'), write: false });
 ok('sync lists all targets', sres.results.length === 2);
 ok('sync marks missing targets changed', sres.results.every((r) => r.missing && r.changed));
+
+// sync --auto: any edited file becomes the source for that run
+const tmp = mkdtempSync(join(tmpdir(), 'agentsync-'));
+writeFileSync(join(tmp, 'agentsync.json'), JSON.stringify({ source: 'AGENTS.md', targets: ['CLAUDE.md'] }));
+writeFileSync(join(tmp, 'AGENTS.md'), '# AGENTS.md\n\n## Build\n\n- Test: `npm test`\n');
+syncAuto({ dir: tmp });                                   // bootstrap from source
+ok('auto: bootstrap generates the target', readFileSync(join(tmp, 'CLAUDE.md'), 'utf8').includes('npm test'));
+// now edit the *target* — it should win and flow back into AGENTS.md
+writeFileSync(join(tmp, 'CLAUDE.md'), '# CLAUDE.md\n\n## Build\n\n- Test: `pytest -q`\n');
+const back = syncAuto({ dir: tmp });
+ok('auto: edited target becomes the winner', back.winner === 'CLAUDE.md');
+ok('auto: change flows back to AGENTS.md', readFileSync(join(tmp, 'AGENTS.md'), 'utf8').includes('pytest -q'));
+// editing two files at once is a conflict
+writeFileSync(join(tmp, 'AGENTS.md'), readFileSync(join(tmp, 'AGENTS.md'), 'utf8') + '\nextra A\n');
+writeFileSync(join(tmp, 'CLAUDE.md'), readFileSync(join(tmp, 'CLAUDE.md'), 'utf8') + '\nextra C\n');
+let conflicted = false;
+try { syncAuto({ dir: tmp }); } catch (e) { conflicted = e.code === 'CONFLICT'; }
+ok('auto: two edits raise a conflict', conflicted);
 
 // semantic parsing: a flat .cursorrules becomes classified sections
 const flat = readFileSync(join(here, '..', 'examples', '.cursorrules'), 'utf8');
