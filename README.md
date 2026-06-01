@@ -36,7 +36,19 @@ cd ai-rules-sync
 node bin/agentsync.mjs --help
 ```
 
-## Quick start
+## Set it up in one command
+
+```bash
+agentsync setup
+```
+
+That's the lazy path. In your repo it: generates `AGENTS.md` (by scanning the
+project), writes an `agentsync.json`, runs the first sync, and installs a git
+pre-commit hook so every commit keeps the files in sync. From then on you just
+edit `AGENTS.md` and commit. Use `agentsync setup --auto` to let the hook accept
+edits to *any* rule file, or `--no-hook` to skip the hook.
+
+## Quick start (manual)
 
 ```bash
 # Point it at your repo and let it write AGENTS.md for you

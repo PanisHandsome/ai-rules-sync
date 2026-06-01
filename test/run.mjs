@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -118,6 +119,19 @@ writeFileSync(join(tmp, 'CLAUDE.md'), readFileSync(join(tmp, 'CLAUDE.md'), 'utf8
 let conflicted = false;
 try { syncAuto({ dir: tmp }); } catch (e) { conflicted = e.code === 'CONFLICT'; }
 ok('auto: two edits raise a conflict', conflicted);
+
+// sync --stage: regenerated files are added to the git index (CLI integration)
+try {
+  const gd = mkdtempSync(join(tmpdir(), 'agentsync-git-'));
+  execFileSync('git', ['init', '-q'], { cwd: gd });
+  writeFileSync(join(gd, 'agentsync.json'), JSON.stringify({ source: 'AGENTS.md', targets: ['CLAUDE.md'] }));
+  writeFileSync(join(gd, 'AGENTS.md'), '# AGENTS.md\n\n## Build\n\n- Test: `npm test`\n');
+  execFileSync('node', [join(here, '..', 'bin', 'agentsync.mjs'), 'sync', '--stage'], { cwd: gd, stdio: 'ignore' });
+  const staged = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: gd }).toString();
+  ok('--stage adds the regenerated target to the index', staged.includes('CLAUDE.md'));
+} catch (e) {
+  ok('--stage adds the regenerated target to the index', false);
+}
 
 // semantic parsing: a flat .cursorrules becomes classified sections
 const flat = readFileSync(join(here, '..', 'examples', '.cursorrules'), 'utf8');

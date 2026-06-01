@@ -2,7 +2,8 @@
 // agentsync CLI — convert between AI agent rule files, or generate AGENTS.md.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { basename } from 'node:path';
-import { watch } from 'node:fs';
+import { watch, chmodSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { convert, merge, generate, detectFormat, FORMATS } from '../src/core/agentsync.js';
 import { scanRepo } from '../src/node/scan.js';
 import { lintFile } from '../src/node/lint.js';
@@ -22,6 +23,7 @@ function has(name) {
 const HELP = `agentsync — one source of truth for your AI coding-agent rules
 
 Usage:
+  agentsync setup [--auto] [--no-hook]          one command: AGENTS.md + config + sync + git hook
   agentsync init [dir] [-o <out>] [--force]    scan a repo and write AGENTS.md
   agentsync sync --init                         create an agentsync.json (auto-detects existing files)
   agentsync sync [--check] [--watch]            regenerate targets from the source in agentsync.json
@@ -66,6 +68,54 @@ try {
       }
       writeFileSync(target, res.output);
       process.stderr.write(`✓ wrote ${target}\n`);
+      break;
+    }
+    case 'setup': {
+      const steps = [];
+      // 1. source file
+      if (!existsSync('AGENTS.md')) {
+        const { spec, detected } = scanRepo('.');
+        writeFileSync('AGENTS.md', generate(spec).output);
+        steps.push(`created AGENTS.md (detected: ${detected.join(' · ')})`);
+      } else {
+        steps.push('AGENTS.md already exists — kept');
+      }
+      // 2. config
+      if (!existsSync('agentsync.json')) {
+        const cfg = initConfig('.');
+        steps.push(`created agentsync.json (targets: ${cfg.targets.join(', ')})`);
+      } else {
+        steps.push('agentsync.json already exists — kept');
+      }
+      // 3. first sync
+      const { results } = sync({ write: true });
+      steps.push(`synced ${results.length} file(s): ${results.map((r) => r.file).join(', ')}`);
+      // 4. git pre-commit hook
+      const syncCmd = has('auto') ? 'sync --auto --stage' : 'sync --stage';
+      if (has('no-hook')) {
+        steps.push('skipped git hook (--no-hook)');
+      } else if (!existsSync('.git')) {
+        steps.push('no .git directory — skipped hook (run `git init`, then `agentsync setup`)');
+      } else {
+        const hookPath = '.git/hooks/pre-commit';
+        const exists = existsSync(hookPath);
+        const body =
+          `# Added by agentsync — keep AI rule files in sync on commit.\n` +
+          `if command -v agentsync >/dev/null 2>&1; then\n  agentsync ${syncCmd}\nelse\n  npx --yes @panishandsome/agentsync ${syncCmd}\nfi\n`;
+        if (exists && readFileSync(hookPath, 'utf8').includes('agentsync')) {
+          steps.push('pre-commit hook already runs agentsync — kept');
+        } else if (exists) {
+          writeFileSync(hookPath, readFileSync(hookPath, 'utf8').replace(/\n*$/, '\n\n') + body);
+          chmodSync(hookPath, 0o755);
+          steps.push('appended agentsync to existing pre-commit hook');
+        } else {
+          writeFileSync(hookPath, `#!/bin/sh\n${body}`);
+          chmodSync(hookPath, 0o755);
+          steps.push('installed pre-commit hook (.git/hooks/pre-commit)');
+        }
+      }
+      process.stderr.write('agentsync setup:\n' + steps.map((s) => `  • ${s}`).join('\n') + '\n');
+      process.stderr.write('\n✓ Done. Edit AGENTS.md; the other files regenerate automatically on commit.\n');
       break;
     }
     case 'convert': {
@@ -135,6 +185,13 @@ try {
         if (has('check') && changed.length) {
           process.stderr.write(`\n${changed.length} file(s) out of sync. Run \`agentsync sync${auto ? ' --auto' : ''}\`.\n`);
           process.exit(1);
+        }
+        if (has('stage') && !has('check')) {
+          try {
+            const cfg = loadConfig('.');
+            const files = configFiles(cfg).map((f) => f.file).filter((f) => existsSync(f));
+            if (files.length) execFileSync('git', ['add', ...files], { stdio: 'ignore' });
+          } catch { /* not a git repo or git unavailable — ignore */ }
         }
         return changed.length;
       };
