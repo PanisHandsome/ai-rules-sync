@@ -14,6 +14,7 @@
       <nav>
         <a href="#playground">Playground</a>
         <a href="#how">How it works</a>
+        <button id="themeToggle" class="theme-toggle" title="Toggle light/dark" aria-label="Toggle theme">🌙</button>
         <a class="gh" href="https://github.com/PanisHandsome/ai-rules-sync" target="_blank" rel="noopener">Star on GitHub</a>
       </nav>
     </div>
@@ -68,14 +69,15 @@
                 <select id="toFmt"></select>
               </label>
               <button id="loadExample" class="ghost">Load a sample file</button>
+              <button id="share" class="ghost">Share link</button>
             </div>
             <div class="io">
               <div class="col">
-                <div class="col-head"><span>Paste your file</span></div>
+                <div class="col-head"><span>Paste your file <span class="hint">— or drop a file here</span></span></div>
                 <textarea id="input" spellcheck="false" placeholder="Drop in a .cursorrules, CLAUDE.md, or copilot-instructions.md…"></textarea>
               </div>
               <div class="col">
-                <div class="col-head"><span class="fname" id="outLabel">AGENTS.md</span><button id="copy" class="ghost sm">Copy</button></div>
+                <div class="col-head"><span class="fname" id="outLabel">AGENTS.md</span><span class="head-actions"><button id="download" class="ghost sm">Download</button><button id="copy" class="ghost sm">Copy</button></span></div>
                 <pre id="output" class="output"></pre>
               </div>
             </div>
@@ -101,7 +103,7 @@
                 </div>
               </div>
               <div class="col">
-                <div class="col-head"><span class="fname">AGENTS.md</span><button id="copyGen" class="ghost sm">Copy</button></div>
+                <div class="col-head"><span class="fname">AGENTS.md</span><span class="head-actions"><button id="downloadGen" class="ghost sm">Download</button><button id="copyGen" class="ghost sm">Copy</button></span></div>
                 <pre id="genOutput" class="output"></pre>
               </div>
             </div>

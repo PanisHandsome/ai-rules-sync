@@ -135,3 +135,80 @@ $('g_test').value = 'pnpm test';
 $('g_build').value = 'pnpm build';
 $('g_lint').value = 'pnpm lint';
 renderGenerate();
+
+// ---- Theme toggle (persisted) ----
+const themeBtn = $('themeToggle');
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  themeBtn.textContent = t === 'light' ? '☀️' : '🌙';
+}
+applyTheme(localStorage.getItem('agentsync-theme') || 'dark');
+themeBtn.addEventListener('click', () => {
+  const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  localStorage.setItem('agentsync-theme', next);
+  applyTheme(next);
+});
+
+// ---- Drag & drop a file onto the input ----
+const inputEl = $('input');
+inputEl.addEventListener('dragover', (e) => { e.preventDefault(); inputEl.classList.add('dragover'); });
+inputEl.addEventListener('dragleave', () => inputEl.classList.remove('dragover'));
+inputEl.addEventListener('drop', (e) => {
+  e.preventDefault();
+  inputEl.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    inputEl.value = reader.result;
+    const guess = detectFormat(file.name, reader.result);
+    if (FORMATS[guess]) fromSel.value = guess;
+    renderConvert();
+  };
+  reader.readAsText(file);
+});
+
+// ---- Download the output as the target filename ----
+function download(text, filename) {
+  const blob = new Blob([text], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+$('download').addEventListener('click', () => {
+  const name = FORMATS[toSel.value].filename.split('/').pop();
+  download($('output').textContent, name);
+});
+$('downloadGen').addEventListener('click', () => download($('genOutput').textContent, 'AGENTS.md'));
+
+// ---- Shareable link (state encoded in the URL hash) ----
+function encodeState(obj) {
+  return btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
+}
+function decodeState(s) {
+  try { return JSON.parse(decodeURIComponent(escape(atob(s)))); } catch { return null; }
+}
+$('share').addEventListener('click', (e) => {
+  const state = { i: inputEl.value, f: fromSel.value, t: toSel.value };
+  const url = `${location.origin}${location.pathname}#s=${encodeState(state)}`;
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = e.target;
+    const old = btn.textContent;
+    btn.textContent = 'Link copied!';
+    setTimeout(() => (btn.textContent = old), 1400);
+  });
+});
+
+// On load, restore state from a shared link.
+if (location.hash.startsWith('#s=')) {
+  const state = decodeState(location.hash.slice(3));
+  if (state && typeof state.i === 'string') {
+    inputEl.value = state.i;
+    if (FORMATS[state.f] || state.f === 'auto') fromSel.value = state.f;
+    if (FORMATS[state.t]) toSel.value = state.t;
+    renderConvert();
+  }
+}

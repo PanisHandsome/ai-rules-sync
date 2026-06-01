@@ -2,9 +2,11 @@
 // agentsync CLI — convert between AI agent rule files, or generate AGENTS.md.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { basename } from 'node:path';
-import { convert, generate, detectFormat, FORMATS } from '../src/core/agentsync.js';
+import { watch } from 'node:fs';
+import { convert, merge, generate, detectFormat, FORMATS } from '../src/core/agentsync.js';
 import { scanRepo } from '../src/node/scan.js';
 import { lintFile } from '../src/node/lint.js';
+import { sync } from '../src/node/sync.js';
 
 const args = process.argv.slice(2);
 const cmd = args[0];
@@ -21,20 +23,22 @@ const HELP = `agentsync — one source of truth for your AI coding-agent rules
 
 Usage:
   agentsync init [dir] [-o <out>] [--force]    scan a repo and write AGENTS.md
+  agentsync sync [--check] [--watch]            regenerate targets from agentsync.json
   agentsync convert <file> [--to agents|claude|cursor|copilot|windsurf|cline|aider|gemini] [--from <fmt>] [-o <out>]
+  agentsync merge <file> <file> ... [--to <fmt>] [-o <out>]
   agentsync generate --name <n> [--language ts] [--framework next] [--test "npm test"] ... [-o <out>]
-  agentsync lint <file>                         check an AGENTS.md for staleness
+  agentsync lint <file> [--strict]              check an AGENTS.md for staleness
   agentsync detect <file>
   agentsync formats
 
-  convert / detect / lint accept --json for machine-readable output.
+  convert / merge / detect / lint accept --json for machine-readable output.
 
 Examples:
   agentsync init                                # scans the current repo
+  agentsync sync                                # AGENTS.md -> all targets
+  agentsync sync --check                        # CI: fail if anything is out of sync
   agentsync convert .cursorrules --to agents -o AGENTS.md
-  agentsync convert CLAUDE.md --to copilot
-  agentsync generate --name "my-app" --language TypeScript --framework Next.js \\
-      --test "npm test" --build "npm run build" -o AGENTS.md
+  agentsync merge CLAUDE.md .cursorrules -o AGENTS.md
 `;
 
 function out(text, target) {
@@ -92,6 +96,60 @@ try {
         dev: flag('dev'),
       };
       const res = generate(spec);
+      out(res.output, flag('o', 'o'));
+      break;
+    }
+    case 'sync': {
+      const runOnce = () => {
+        const { results, warnings } = sync({ write: !has('check') });
+        warnings.forEach((w) => process.stderr.write(`⚠ ${w}\n`));
+        const changed = results.filter((r) => r.changed);
+        for (const r of results) {
+          const mark = r.changed ? (has('check') ? '✗ out of sync' : '✓ updated') : '· up to date';
+          process.stderr.write(`  ${mark}  ${r.file}\n`);
+        }
+        if (has('check') && changed.length) {
+          process.stderr.write(`\n${changed.length} file(s) out of sync. Run \`agentsync sync\`.\n`);
+          process.exit(1);
+        }
+        return changed.length;
+      };
+      if (has('watch')) {
+        const { source } = sync({ write: true });
+        runOnce();
+        process.stderr.write(`\n👀 watching ${source} … (Ctrl-C to stop)\n`);
+        let busy = false;
+        watch(source, () => {
+          if (busy) return;
+          busy = true;
+          setTimeout(() => { try { runOnce(); } catch (e) { process.stderr.write(`Error: ${e.message}\n`); } busy = false; }, 50);
+        });
+      } else {
+        runOnce();
+        process.exit(0);
+      }
+      break;
+    }
+    case 'merge': {
+      const files = [];
+      for (let i = 1; i < args.length; i++) {
+        if (args[i].startsWith('-')) break;
+        files.push(args[i]);
+      }
+      if (files.length < 2) throw new Error('merge needs at least two files');
+      const inputs = files.map((f) => {
+        if (!existsSync(f)) throw new Error(`file not found: ${f}`);
+        const text = readFileSync(f, 'utf8');
+        return { text, from: detectFormat(basename(f), text) };
+      });
+      const to = flag('to') || 'agents';
+      const res = merge(inputs, { to });
+      if (has('json')) {
+        process.stdout.write(JSON.stringify({ to, warnings: res.warnings, output: res.output }, null, 2) + '\n');
+        break;
+      }
+      res.warnings.forEach((w) => process.stderr.write(`⚠ ${w}\n`));
+      process.stderr.write(`↳ merged ${files.length} files → ${to}\n`);
       out(res.output, flag('o', 'o'));
       break;
     }

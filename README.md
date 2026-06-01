@@ -10,6 +10,8 @@
 
 🔗 **Live playground: https://panishandsome.github.io/ai-rules-sync/**
 
+![agentsync playground](docs/playground.png)
+
 Codex reads `AGENTS.md`. Claude Code reads `CLAUDE.md`. Cursor reads `.cursorrules`.
 Copilot reads `.github/copilot-instructions.md`. Keeping them in sync by hand is
 tedious and they drift. `agentsync` **converts between all of them** — or
@@ -50,6 +52,41 @@ agentsync generate --name my-app --language TypeScript --framework Next.js \
 
 # Check an AGENTS.md for stale commands / missing paths
 agentsync lint AGENTS.md
+```
+
+## Keep one source of truth, sync the rest
+
+Write `AGENTS.md` once and let the other tools' files be generated from it. Add an
+`agentsync.json`:
+
+```json
+{
+  "source": "AGENTS.md",
+  "targets": ["CLAUDE.md", ".cursorrules", ".github/copilot-instructions.md"]
+}
+```
+
+```bash
+agentsync sync            # regenerate every target from AGENTS.md
+agentsync sync --watch    # regenerate on every save
+agentsync sync --check    # CI: exit non-zero if anything is out of sync
+```
+
+Make it automatic with a pre-commit hook (so the committed files are always in sync):
+
+```bash
+npx husky init
+echo "npx agentsync sync && git add -A" > .husky/pre-commit
+```
+
+Edit only `AGENTS.md` from then on — the other files are generated outputs.
+
+## Merge existing files into one
+
+Already have several rule files? Fold them into a single `AGENTS.md`:
+
+```bash
+agentsync merge CLAUDE.md .cursorrules -o AGENTS.md
 ```
 
 ## Try it in the browser
@@ -95,7 +132,9 @@ and `Do not` sections rather than dumped into one blob.
 
 ```
 agentsync init [dir] [-o <out>] [--force]
+agentsync sync [--check] [--watch]
 agentsync convert <file> [--to <fmt>] [--from <fmt>] [-o <out>] [--json]
+agentsync merge <file> <file> ... [--to <fmt>] [-o <out>] [--json]
 agentsync generate --name <n> [--language ..] [--framework ..] [--test ..] [-o <out>]
 agentsync lint <file> [--strict] [--json]
 agentsync detect <file> [--json]

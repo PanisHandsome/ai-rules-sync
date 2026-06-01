@@ -1,7 +1,8 @@
 // Minimal zero-dependency test runner.
-import { convert, generate, detectFormat } from '../src/core/agentsync.js';
+import { convert, merge, generate, detectFormat } from '../src/core/agentsync.js';
 import { scanRepo } from '../src/node/scan.js';
 import { lint } from '../src/node/lint.js';
+import { sync } from '../src/node/sync.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFileSync } from 'node:fs';
@@ -63,6 +64,23 @@ ok('scan detects Python', py.spec.language === 'Python');
 ok('scan detects FastAPI', py.spec.framework === 'FastAPI');
 ok('scan detects uv', py.spec.packageManager === 'uv');
 ok('scan uses uv run pytest', py.spec.test === 'uv run pytest');
+
+// title handling: a leading "# Title" must not become a duplicate section
+const titled = convert('# AGENTS.md\n\n## Setup\n\nRun `npm test`.', { from: 'agents', to: 'agents' }).output;
+ok('title is not duplicated as a section', !titled.includes('## AGENTS.md'));
+
+// merge: two files combine, same-heading sections fold together
+const a = '# AGENTS.md\n\n## Build\n\n- Test: `npm test`';
+const b = '## Build\n\n- Lint: `eslint .`\n\n## Style\n\n- No `any`.';
+const mg = merge([{ text: a, from: 'agents' }, { text: b, from: 'cursor' }], { to: 'agents' }).output;
+ok('merge keeps first file content', mg.includes('npm test'));
+ok('merge folds same heading (Build)', mg.includes('eslint .') && (mg.match(/## Build/g) || []).length === 1);
+ok('merge keeps distinct section (Style)', mg.includes('## Style'));
+
+// sync: dry run reports missing targets as changed
+const sres = sync({ dir: join(here, 'fixtures', 'sync'), write: false });
+ok('sync lists all targets', sres.results.length === 2);
+ok('sync marks missing targets changed', sres.results.every((r) => r.missing && r.changed));
 
 // semantic parsing: a flat .cursorrules becomes classified sections
 const flat = readFileSync(join(here, '..', 'examples', '.cursorrules'), 'utf8');

@@ -19,6 +19,22 @@
   --radius: 12px;
 }
 
+/* Light theme overrides */
+:root[data-theme="light"] {
+  --bg: #ffffff;
+  --bg-soft: #f6f8fa;
+  --panel: #ffffff;
+  --panel-2: #f0f2f5;
+  --field: #f6f8fa;
+  --border: #d8dee4;
+  --border-soft: #e6eaef;
+  --text: #1f2328;
+  --muted: #57606a;
+  --faint: #8b949e;
+  --accent: #1a7f64;
+  --accent-soft: #15705a;
+}
+
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body {
@@ -59,6 +75,15 @@ nav a.gh {
   border-radius: 8px; font-size: 13px;
 }
 nav a.gh:hover { border-color: var(--accent); }
+.theme-toggle {
+  background: transparent; border: 1px solid var(--border); border-radius: 8px;
+  width: 32px; height: 32px; cursor: pointer; font-size: 14px; line-height: 1;
+  color: var(--text);
+}
+.theme-toggle:hover { border-color: var(--accent); }
+.head-actions { display: inline-flex; gap: 6px; }
+.hint { color: var(--faint); font-weight: 400; }
+textarea#input.dragover { border-color: var(--accent); background: var(--panel-2); }
 
 /* ---- Hero ---- */
 .hero { position: relative; padding: 88px 0 56px; overflow: hidden; }

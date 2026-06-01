@@ -106,7 +106,8 @@ function splitSections(body) {
   let current = null;
 
   for (const line of lines) {
-    const h = line.match(/^#{1,3}\s+(.*)$/);
+    // Only ## / ### start sections; a leading # is the document title (kept in intro).
+    const h = line.match(/^#{2,3}\s+(.*)$/);
     if (h) {
       if (current) sections.push(current);
       else intro = intro; // keep collected intro
@@ -192,6 +193,14 @@ export function parse(text, format) {
 
   let { intro, sections } = splitSections(body);
 
+  // A leading "# Title" belongs to the title, not the body — pull it out of intro.
+  let titleFromBody = '';
+  const h1 = intro.match(/^#\s+(.+)\n?/);
+  if (h1) {
+    titleFromBody = h1[1].trim();
+    intro = intro.slice(h1[0].length).trim();
+  }
+
   // Plain-text rule files (classic .cursorrules) often have no headings.
   // Classify the prose into semantic sections instead of one opaque blob.
   if (sections.length === 0 && intro.trim()) {
@@ -205,10 +214,8 @@ export function parse(text, format) {
     }
   }
 
-  const firstHeadingTitle = (text.match(/^#\s+(.*)$/m) || [])[1];
-
   return {
-    title: meta.title || firstHeadingTitle || '',
+    title: meta.title || titleFromBody || '',
     intro,
     sections,
     globs,
@@ -308,6 +315,55 @@ export function convert(text, { from, to = 'agents' } = {}) {
     from: source,
     to,
   };
+}
+
+/**
+ * Merge several rule files into one. Sections with the same heading are combined
+ * (deduping identical lines); intros, globs and warnings are unioned.
+ * @param {{text: string, from?: string}[]} inputs
+ * @returns {{output: string, warnings: string[], to: string}}
+ */
+export function merge(inputs, { to = 'agents' } = {}) {
+  const merged = { title: '', intro: '', sections: [], globs: [], sourceFormat: 'merge', warnings: [] };
+  const byHeading = new Map();
+  const intros = [];
+
+  for (const { text, from } of inputs) {
+    const fmt = from || detectFormat('', text);
+    const ir = parse(text, fmt);
+    if (!merged.title && ir.title) merged.title = ir.title;
+    if (ir.intro) intros.push(ir.intro);
+    for (const g of ir.globs) if (!merged.globs.includes(g)) merged.globs.push(g);
+    for (const w of ir.warnings) merged.warnings.push(w);
+    for (const s of ir.sections) {
+      const key = s.heading.toLowerCase().trim();
+      if (byHeading.has(key)) {
+        const existing = byHeading.get(key);
+        existing.body = dedupeLines(existing.body + '\n' + s.body);
+      } else {
+        const copy = { heading: s.heading, body: s.body };
+        byHeading.set(key, copy);
+        merged.sections.push(copy);
+      }
+    }
+  }
+  merged.intro = [...new Set(intros)].join('\n\n');
+  return { output: render(merged, to), warnings: merged.warnings, to };
+}
+
+function dedupeLines(text) {
+  const seen = new Set();
+  return text
+    .split('\n')
+    .filter((line) => {
+      const k = line.trim();
+      if (!k) return true; // keep blank lines for spacing
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .join('\n')
+    .trim();
 }
 
 // ---------------------------------------------------------------------------

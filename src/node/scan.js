@@ -1,6 +1,6 @@
 // Repo scanner (Node only — uses node:fs). Inspects a project directory and
 // produces a spec for generate(). Browser code must NOT import this file.
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 
 function read(file) {
@@ -130,20 +130,46 @@ function scanRust(dir) {
   };
 }
 
+const COMMON_GENERATED = [
+  'generated', 'migrations', 'dist', 'build', 'out', '.next', 'target',
+  '__pycache__', '.svelte-kit', 'coverage', 'vendor',
+];
+
+function isDir(p) {
+  try { return statSync(p).isDirectory(); } catch { return false; }
+}
+
+// Build "Do not edit" rules from .gitignore + common generated/build dirs.
+function detectDoNots(dir) {
+  const dirs = new Set();
+  const gitignore = read(join(dir, '.gitignore'));
+  for (const raw of gitignore.split('\n')) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#') || line.startsWith('!')) continue;
+    const name = line.replace(/^\.?\//, '').replace(/\/.*$/, '').replace(/\/$/, '');
+    if (name && !name.includes('*') && !name.startsWith('.') && isDir(join(dir, name))) dirs.add(name);
+  }
+  for (const name of COMMON_GENERATED) if (isDir(join(dir, name))) dirs.add(name);
+
+  const doNots = [...dirs].map((d) => `Edit files under \`${d}/\` — it is generated or build output.`);
+  doNots.push('Commit secrets, API keys, or credentials.');
+  return doNots;
+}
+
 /**
  * Inspect a directory and return { spec, detected }.
  * `spec` feeds generate(); `detected` is a human-readable list of findings.
  */
 export function scanRepo(dir = '.') {
+  let result;
   const pkg = readJSON(join(dir, 'package.json'));
-  if (pkg) return scanNode(dir, pkg);
-  if (existsSync(join(dir, 'pyproject.toml')) || existsSync(join(dir, 'requirements.txt')) || existsSync(join(dir, 'setup.py')))
-    return scanPython(dir);
-  if (existsSync(join(dir, 'go.mod'))) return scanGo(dir);
-  if (existsSync(join(dir, 'Cargo.toml'))) return scanRust(dir);
+  if (pkg) result = scanNode(dir, pkg);
+  else if (existsSync(join(dir, 'pyproject.toml')) || existsSync(join(dir, 'requirements.txt')) || existsSync(join(dir, 'setup.py')))
+    result = scanPython(dir);
+  else if (existsSync(join(dir, 'go.mod'))) result = scanGo(dir);
+  else if (existsSync(join(dir, 'Cargo.toml'))) result = scanRust(dir);
+  else result = { spec: { name: basename(resolve(dir)) }, detected: ['no recognized manifest — generated a generic template'] };
 
-  return {
-    spec: { name: basename(resolve(dir)) },
-    detected: ['no recognized manifest — generated a generic template'],
-  };
+  result.spec.doNots = detectDoNots(dir);
+  return result;
 }
