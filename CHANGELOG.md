@@ -3,6 +3,12 @@
 All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.3.1] — 2026-06-03
+
+### Added
+- **Qwen Code** support (`QWEN.md`) — convert to/from it like any other format;
+  ninth supported tool. Detected by filename and included in `agentsync formats`.
+
 ## [0.3.0] — 2026-06-01
 
 ### Added

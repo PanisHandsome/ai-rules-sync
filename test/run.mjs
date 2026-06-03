@@ -47,8 +47,12 @@ ok('generate has PR checklist', g.output.includes('Before opening a PR'));
 ok('detect .clinerules', detectFormat('.clinerules', '') === 'cline');
 ok('detect CONVENTIONS.md', detectFormat('CONVENTIONS.md', '') === 'aider');
 ok('detect GEMINI.md', detectFormat('GEMINI.md', '') === 'gemini');
+ok('detect QWEN.md', detectFormat('QWEN.md', '') === 'qwen');
 const toGemini = convert('# CLAUDE.md\n\n## Setup\n\nRun `npm test`.', { from: 'claude', to: 'gemini' });
 ok('claude→gemini keeps command', toGemini.output.includes('npm test'));
+const toQwen = convert('# CLAUDE.md\n\n## Setup\n\nRun `npm test`.', { from: 'claude', to: 'qwen' });
+ok('claude→qwen keeps command', toQwen.output.includes('npm test'));
+ok('claude→qwen renders QWEN title', toQwen.output.startsWith('# QWEN.md'));
 const toCline = convert('Use strict types.\n\n- Run `pytest`.', { from: 'cursor', to: 'cline' });
 ok('cursor→cline renders title', toCline.output.startsWith('# Cline rules'));
 

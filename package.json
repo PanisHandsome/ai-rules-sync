@@ -1,6 +1,6 @@
 {
   "name": "@panishandsome/agentsync",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Convert between AI coding-agent rule files (AGENTS.md, CLAUDE.md, .cursorrules, Copilot, Windsurf) or scaffold a fresh AGENTS.md. Zero dependencies.",
   "type": "module",
   "bin": {
@@ -19,7 +19,7 @@
     "test": "node test/run.mjs"
   },
   "files": ["src", "bin", "README.md", "LICENSE"],
-  "keywords": ["agents.md", "codex", "claude", "cursor", "copilot", "windsurf", "ai", "coding-agent", "llm", "cli"],
+  "keywords": ["agents.md", "codex", "claude", "cursor", "copilot", "windsurf", "gemini", "qwen", "ai", "coding-agent", "llm", "cli"],
   "homepage": "https://panishandsome.github.io/ai-rules-sync/",
   "repository": {
     "type": "git",

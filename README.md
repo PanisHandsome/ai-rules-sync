@@ -148,6 +148,7 @@ npm run web      # → http://localhost:5173
 | `cline`   | `.clinerules`                         | Cline         |
 | `aider`   | `CONVENTIONS.md`                      | Aider         |
 | `gemini`  | `GEMINI.md`                           | Gemini CLI    |
+| `qwen`    | `QWEN.md`                             | Qwen Code     |
 
 Run `agentsync formats` to list them.
 

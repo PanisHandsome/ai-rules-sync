@@ -60,13 +60,18 @@ export const FORMATS = {
     label: 'GEMINI.md (Gemini CLI)',
     filename: 'GEMINI.md',
   },
+  qwen: {
+    id: 'qwen',
+    label: 'QWEN.md (Qwen Code)',
+    filename: 'QWEN.md',
+  },
 };
 
 // Titles that are really just a tool's own filename/heading — not a project name.
 // We don't carry these across a conversion (converting CLAUDE.md -> AGENTS.md
 // should not produce a doc titled "CLAUDE").
 const GENERIC_TITLES = new Set([
-  'agents', 'claude', 'gemini', 'conventions', 'windsurf',
+  'agents', 'claude', 'gemini', 'qwen', 'conventions', 'windsurf',
   'copilot instructions', 'copilot-instructions', 'cline rules', 'coding conventions',
   '.cursorrules', '.windsurfrules', '.clinerules',
 ]);
@@ -85,6 +90,7 @@ export function detectFormat(filenameOrContent = '', content = '') {
   if (name.includes('.clinerules')) return 'cline';
   if (name.endsWith('conventions.md')) return 'aider';
   if (name.endsWith('gemini.md')) return 'gemini';
+  if (name.endsWith('qwen.md')) return 'qwen';
 
   // Fall back to sniffing the body.
   const body = (content || filenameOrContent).toLowerCase();
@@ -305,6 +311,7 @@ const RENDERERS = {
   cline: renderTitled('Cline rules'),
   aider: renderTitled('Coding conventions'),
   gemini: renderTitled('GEMINI.md'),
+  qwen: renderTitled('QWEN.md'),
 };
 
 export function render(ir, to) {
