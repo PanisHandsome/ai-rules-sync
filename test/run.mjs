@@ -2,7 +2,7 @@
 import { convert, merge, generate, detectFormat } from '../src/core/agentsync.js';
 import { scanRepo } from '../src/node/scan.js';
 import { lint } from '../src/node/lint.js';
-import { sync, syncAuto, initConfig, loadConfig } from '../src/node/sync.js';
+import { sync, syncAuto, initConfig, loadConfig, safeWrite } from '../src/node/sync.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFileSync, writeFileSync, mkdtempSync, existsSync } from 'node:fs';
@@ -196,6 +196,36 @@ try {
   sync({ dir: tmp });
   const out = readFileSync(join(tmp, 'CUSTOM.md'), 'utf8');
   ok('format override: target is rendered in the requested format', out.startsWith('# CLAUDE.md'));
+}
+
+// safeWrite: writes content to target, leaves a .bak of the previous content
+{
+  const tmp = mkdtempSync(join(tmpdir(), 'agentsync-safewrite-'));
+  const target = join(tmp, 'rules.md');
+  writeFileSync(target, 'original\n');
+  safeWrite(target, 'new\n');
+  ok('safeWrite: target is updated', readFileSync(target, 'utf8') === 'new\n');
+  ok('safeWrite: .bak holds the previous content', readFileSync(target + '.bak', 'utf8') === 'original\n');
+}
+
+// safeWrite: first write to a non-existent target does not create a .bak
+{
+  const tmp = mkdtempSync(join(tmpdir(), 'agentsync-safewrite-new-'));
+  const target = join(tmp, 'fresh.md');
+  safeWrite(target, 'hello\n');
+  ok('safeWrite: fresh write creates the file', readFileSync(target, 'utf8') === 'hello\n');
+  ok('safeWrite: no .bak is created when the target is fresh', !existsSync(target + '.bak'));
+}
+
+// safeWrite: a subsequent write updates the .bak to the previous new content
+{
+  const tmp = mkdtempSync(join(tmpdir(), 'agentsync-safewrite-overwrite-'));
+  const target = join(tmp, 'rules.md');
+  writeFileSync(target, 'v1\n');
+  safeWrite(target, 'v2\n');
+  safeWrite(target, 'v3\n');
+  ok('safeWrite: third write leaves v2 in the .bak', readFileSync(target + '.bak', 'utf8') === 'v2\n');
+  ok('safeWrite: third write leaves v3 in the target', readFileSync(target, 'utf8') === 'v3\n');
 }
 
 // semantic parsing: a flat .cursorrules becomes classified sections

@@ -6,8 +6,9 @@
 //
 // A target may also be an object: { "file": "X", "to": "<format>" } to force the
 // output format instead of inferring it from the filename.
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { existsSync, readFileSync, writeFileSync, renameSync, unlinkSync, mkdtempSync } from 'node:fs';
+import { basename, join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { convert, detectFormat } from '../core/agentsync.js';
 
@@ -15,6 +16,34 @@ export const CONFIG_NAME = 'agentsync.json';
 export const STATE_NAME = '.agentsync-state.json';
 
 const sha = (s) => createHash('sha1').update(s).digest('hex');
+
+/**
+ * Atomically write `content` to `path`.
+ *
+ * Strategy: write to a temp file in the same directory as the target, then
+ * rename it on top of the target. On any error, the temp file is removed and
+ * the original target (if any) is left untouched. A `.bak` of the previous
+ * content is kept next to the target so a user can recover with `mv file.bak
+ * file` if the new content was unintended.
+ *
+ * Same-directory rename is atomic on POSIX and on NTFS, so partial writes
+ * never produce a half-written target.
+ */
+export function safeWrite(path, content) {
+  const dir = dirname(path);
+  const tmp = join(dir, `.${basename(path)}.${process.pid}.${Date.now()}.tmp`);
+  writeFileSync(tmp, content);
+  try {
+    if (existsSync(path)) {
+      const bak = `${path}.bak`;
+      writeFileSync(bak, readFileSync(path));
+    }
+    renameSync(tmp, path);
+  } catch (err) {
+    try { unlinkSync(tmp); } catch { /* best effort */ }
+    throw err;
+  }
+}
 
 export const EXAMPLE_CONFIG = {
   source: 'AGENTS.md',
@@ -90,7 +119,7 @@ export function sync({ dir = '.', write = true } = {}) {
     const path = join(dir, file);
     const before = existsSync(path) ? readFileSync(path, 'utf8') : null;
     const changed = before !== res.output;
-    if (write && changed) writeFileSync(path, res.output);
+    if (write && changed) safeWrite(path, res.output);
     results.push({ file, to, changed, missing: before === null });
   }
   return { source: cfg.source, results, warnings };
@@ -156,10 +185,10 @@ export function syncAuto({ dir = '.', write = true, source: forced } = {}) {
     const res = convert(cur[winner].text, { from, to });
     res.warnings.forEach((w) => warnings.push(`${file}: ${w}`));
     const changed = cur[file].text !== res.output;
-    if (write && changed) writeFileSync(join(dir, file), res.output);
+    if (write && changed) safeWrite(join(dir, file), res.output);
     newState[file] = sha(res.output);
     results.push({ file, to, changed, missing: !cur[file].exists });
   }
-  if (write) writeFileSync(statePath, JSON.stringify(newState, null, 2) + '\n');
+  if (write) safeWrite(statePath, JSON.stringify(newState, null, 2) + '\n');
   return { mode: 'auto', winner, results, warnings };
 }
