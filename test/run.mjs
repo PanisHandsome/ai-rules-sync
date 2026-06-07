@@ -2,10 +2,10 @@
 import { convert, merge, generate, detectFormat } from '../src/core/agentsync.js';
 import { scanRepo } from '../src/node/scan.js';
 import { lint } from '../src/node/lint.js';
-import { sync, syncAuto, initConfig } from '../src/node/sync.js';
+import { sync, syncAuto, initConfig, loadConfig, safeWrite } from '../src/node/sync.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 
@@ -135,6 +135,97 @@ try {
   ok('--stage adds the regenerated target to the index', staged.includes('CLAUDE.md'));
 } catch (e) {
   ok('--stage adds the regenerated target to the index', false);
+}
+
+// noop: a second sync with no source change must not mark any target changed
+{
+  const tmp = mkdtempSync(join(tmpdir(), 'agentsync-noop-'));
+  writeFileSync(join(tmp, 'agentsync.json'), JSON.stringify({ source: 'AGENTS.md', targets: ['CLAUDE.md'] }));
+  writeFileSync(join(tmp, 'AGENTS.md'), '# AGENTS.md\n\n## Build\n\n- Test: `npm test`\n');
+  const first = sync({ dir: tmp });
+  ok('noop: first sync marks target changed', first.results.every((r) => r.changed));
+  const second = sync({ dir: tmp });
+  ok('noop: second sync with no source change is a noop', second.results.every((r) => !r.changed));
+  // file content is byte-identical to the first sync output
+  const firstContent = readFileSync(join(tmp, 'CLAUDE.md'), 'utf8');
+  const secondContent = readFileSync(join(tmp, 'CLAUDE.md'), 'utf8');
+  ok('noop: target content is byte-identical across syncs', firstContent === secondContent);
+}
+
+// sync: dry run does not write even when target is missing
+{
+  const tmp = mkdtempSync(join(tmpdir(), 'agentsync-dry-'));
+  writeFileSync(join(tmp, 'agentsync.json'), JSON.stringify({ source: 'AGENTS.md', targets: ['CLAUDE.md'] }));
+  writeFileSync(join(tmp, 'AGENTS.md'), '# AGENTS.md\n\n## Build\n\n- Test: `npm test`\n');
+  const res = sync({ dir: tmp, write: false });
+  ok('dry: target is reported missing', res.results.every((r) => r.missing));
+  ok('dry: target is reported changed', res.results.every((r) => r.changed));
+  ok('dry: target file was not created', !existsSync(join(tmp, 'CLAUDE.md')));
+}
+
+// sync: missing source raises a clear error
+{
+  const tmp = mkdtempSync(join(tmpdir(), 'agentsync-nosrc-'));
+  writeFileSync(join(tmp, 'agentsync.json'), JSON.stringify({ source: 'AGENTS.md', targets: ['CLAUDE.md'] }));
+  let msg = '';
+  try { sync({ dir: tmp }); } catch (e) { msg = e.message; }
+  ok('missing source raises a clear error', msg.includes('source not found') && msg.includes('AGENTS.md'));
+}
+
+// sync: invalid config (missing source or targets) raises a clear error
+{
+  const tmp = mkdtempSync(join(tmpdir(), 'agentsync-badcfg-'));
+  writeFileSync(join(tmp, 'agentsync.json'), JSON.stringify({ targets: ['CLAUDE.md'] }));
+  let msg = '';
+  try { loadConfig(tmp); } catch (e) { msg = e.message; }
+  ok('config without source is rejected', msg.includes('"source"'));
+  writeFileSync(join(tmp, 'agentsync.json'), JSON.stringify({ source: 'AGENTS.md' }));
+  msg = '';
+  try { loadConfig(tmp); } catch (e) { msg = e.message; }
+  ok('config without targets is rejected', msg.includes('"targets"'));
+}
+
+// sync: explicit target format override (object form in config)
+{
+  const tmp = mkdtempSync(join(tmpdir(), 'agentsync-fmt-'));
+  writeFileSync(join(tmp, 'agentsync.json'), JSON.stringify({
+    source: 'AGENTS.md',
+    targets: [{ file: 'CUSTOM.md', to: 'claude' }],
+  }));
+  writeFileSync(join(tmp, 'AGENTS.md'), '# AGENTS.md\n\n## Setup\n\nRun `npm test`.\n');
+  sync({ dir: tmp });
+  const out = readFileSync(join(tmp, 'CUSTOM.md'), 'utf8');
+  ok('format override: target is rendered in the requested format', out.startsWith('# CLAUDE.md'));
+}
+
+// safeWrite: writes content to target, leaves a .bak of the previous content
+{
+  const tmp = mkdtempSync(join(tmpdir(), 'agentsync-safewrite-'));
+  const target = join(tmp, 'rules.md');
+  writeFileSync(target, 'original\n');
+  safeWrite(target, 'new\n');
+  ok('safeWrite: target is updated', readFileSync(target, 'utf8') === 'new\n');
+  ok('safeWrite: .bak holds the previous content', readFileSync(target + '.bak', 'utf8') === 'original\n');
+}
+
+// safeWrite: first write to a non-existent target does not create a .bak
+{
+  const tmp = mkdtempSync(join(tmpdir(), 'agentsync-safewrite-new-'));
+  const target = join(tmp, 'fresh.md');
+  safeWrite(target, 'hello\n');
+  ok('safeWrite: fresh write creates the file', readFileSync(target, 'utf8') === 'hello\n');
+  ok('safeWrite: no .bak is created when the target is fresh', !existsSync(target + '.bak'));
+}
+
+// safeWrite: a subsequent write updates the .bak to the previous new content
+{
+  const tmp = mkdtempSync(join(tmpdir(), 'agentsync-safewrite-overwrite-'));
+  const target = join(tmp, 'rules.md');
+  writeFileSync(target, 'v1\n');
+  safeWrite(target, 'v2\n');
+  safeWrite(target, 'v3\n');
+  ok('safeWrite: third write leaves v2 in the .bak', readFileSync(target + '.bak', 'utf8') === 'v2\n');
+  ok('safeWrite: third write leaves v3 in the target', readFileSync(target, 'utf8') === 'v3\n');
 }
 
 // semantic parsing: a flat .cursorrules becomes classified sections
